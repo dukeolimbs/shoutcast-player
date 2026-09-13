@@ -37,16 +37,48 @@ extract it into your Foundry `Data/modules/` folder as `shoutcast-player-v2`.
 
 ## Usage
 
-1. Enable the module in **Manage Modules**.
-2. As GM, open **Game Settings → Configure Settings → SHOUTcast Player** and set
-   the **Stream URL**, e.g. `https://your.stream.host:8000/stream`. This is a
-   world setting — you set it once and every player uses it.
-3. Click the **📻 radio button** in the Token Controls toolbar to open the player.
-4. Press **Play**. The status bar shows the live connection state; adjust volume
-   with the slider.
+### Setup — GM, once
 
-> **Upgrading from 2.0.x:** the Stream URL used to be a per-client setting. It is
-> now world-scoped, so it needs entering once more after the update.
+1. Enable the module in **Manage Modules**.
+2. Open **Game Settings → Configure Settings → SHOUTcast Player** and set the
+   **Stream URL**, for example `https://your.stream.host:8000/stream`.
+
+That is the whole setup. The URL is a world setting, so you enter it once and
+every player uses it — players never see the field and have nothing to fill in.
+If Foundry is served over `https://`, the stream must be too; see
+[Troubleshooting](#troubleshooting).
+
+> **Upgrading from 2.0.x:** the Stream URL used to be a per-client setting, so it
+> needs entering one final time after the update.
+
+### Running a session — GM
+
+- Click the **📻 radio button** in the Token Controls toolbar to open the player.
+- **Play** starts the stream for you *and* tells every connected player to start
+  too. **Stop** stops everyone.
+- The volume slider changes **only your own** volume. You cannot set a player's
+  volume for them, and they cannot change yours.
+- Players who connect *after* you pressed Play are not started automatically.
+  Either ask them to press Play, or press Stop and Play again to re-sync the room.
+- If a player reports silence, have them open the player window — they are most
+  likely sitting in **Waiting for you** (see below), which only they can clear.
+
+### Listening — players
+
+- **There is nothing to set up.** Your GM configures the stream; no URL, no
+  settings.
+- When the GM starts the stream it should simply begin playing.
+- If you see **Waiting for you**, your browser is refusing to start audio until
+  you interact with the page. Click anywhere in Foundry, or press **Play** in the
+  player window, and it will carry on by itself. This is a browser rule, not a
+  fault in the stream.
+- Open the player any time with the **📻 radio button** in the Token Controls
+  toolbar. From there you can:
+  - **Stop** listening without affecting anyone else. Your Play and Stop are
+    yours alone — only the GM's are shared with the room.
+  - Set **your own volume**, which is remembered for next session.
+- The stream is separate from Foundry's own audio, so the sliders in Foundry's
+  audio settings do not affect it. Use the slider in the player window.
 
 ### Connection states
 
@@ -63,19 +95,27 @@ always be cancelled.
 
 ## Troubleshooting
 
-**"No Signal" forever, but the stream plays fine in a browser tab.**
-Check the protocol. If Foundry is served over `https://` then the stream must be
-too — browsers block `http://` media on an HTTPS page. The module detects this
-case and says so explicitly rather than leaving you guessing.
+**"No Signal" that never clears, but the stream plays fine in a browser tab.** —
+*GM.* Check the protocol. If Foundry is served over `https://` then the stream
+must be too; browsers block `http://` media on an HTTPS page. The module detects
+this one and says so outright rather than leaving you guessing.
 
-**Players hear nothing when the GM presses Play.**
-Their browser blocked autoplay, which the window reports as *Waiting for you*.
-Any click in Foundry releases it; the module retries automatically once that
-happens.
+**Nobody hears anything when the GM presses Play.** — *GM.* GM sync needs the
+module's socket namespace, which comes from `"socket": true` in `module.json`.
+If you have hand-edited that file, note that Foundry only re-reads it on
+restart, not on a browser reload — the module warns about this in the console on
+startup.
 
-**The GM's Play doesn't reach anyone.**
-GM sync needs the module's socket namespace, which means `"socket": true` in the
-manifest. If you have a hand-edited copy of `module.json`, make sure it is there.
+**One player hears nothing while everyone else does.** — *That player.* Have
+them open the player window. If it reads *Waiting for you*, their browser is
+holding audio back until they interact with the page; any click in Foundry
+releases it and playback resumes by itself. If it reads *LIVE*, check their own
+volume slider in that window — it is separate from Foundry's audio settings, so
+turning those up will not help.
+
+**"No Signal" while you are not broadcasting.** — Working as intended. That is
+the ordinary waiting state; it reconnects on its own as soon as a source goes
+live. Press **Stop** if you would rather it stopped trying.
 
 ## Compatibility
 
