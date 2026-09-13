@@ -48,6 +48,11 @@
   color: #f08080;
 }
 
+#stream-player-app .stream-status.blocked {
+  background: rgba(0, 40, 80, 0.35);
+  color: #8ec5ff;
+}
+
 #stream-player-app .stream-status.connecting {
   background: rgba(0, 40, 80, 0.35);
   color: var(--color-text-light-primary);

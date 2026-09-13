@@ -1,47 +1,99 @@
+const MODULE_ID = "shoutcast-player-v2";
+const APP_ID = "stream-player-app";
+
 const PlayerState = Object.freeze({
   IDLE: "idle",
   CONNECTING: "connecting",
   PLAYING: "playing",
   NO_SIGNAL: "no-signal",
+  BLOCKED: "blocked",
   ERROR: "error",
 });
+
+const ErrorReason = Object.freeze({
+  MIXED_CONTENT: "mixed-content",
+  PLAY_REJECTED: "play-rejected",
+});
+
+/** How long to wait for the 'playing' event before calling a connect failed. */
+const CONNECT_TIMEOUT = 8000;
+
+/**
+ * Backoff between reconnect attempts, in ms; the last entry repeats forever.
+ *
+ * A browser cannot distinguish "the mount has no source yet" from "the server
+ * is down" — both surface as MEDIA_ERR_SRC_NOT_SUPPORTED, and MEDIA_ERR_NETWORK
+ * only appears once a stream has already been established. So rather than
+ * guessing from the error code we keep retrying either way and let the attempt
+ * count drive what the window says.
+ */
+const RETRY_DELAYS = [15000, 15000, 30000, 30000, 60000];
+
+/** Consecutive failures before the UI stops blaming the broadcaster. */
+const UNREACHABLE_AFTER = 4;
+
+/** How long the volume slider must settle before the setting is persisted. */
+const VOLUME_SAVE_DELAY = 300;
 
 /**
  * Manages the audio stream connection with a simple state machine.
  *
  * States:
  *   idle       → not started
- *   connecting → play() called; waiting for audio to begin (8s timeout)
- *   playing    → audio confirmed playing
- *   no-signal  → server reached but no source (Mixxx not broadcasting); auto-retries every 15s
- *   error      → server unreachable; requires manual retry
+ *   connecting → waiting for audio to begin (CONNECT_TIMEOUT)
+ *   playing    → audio confirmed audible
+ *   no-signal  → connect failed; retrying on a backoff, indefinitely
+ *   blocked    → browser refused playback pending a user gesture
+ *   error      → terminal; needs the user to fix something and retry
  */
 class StreamPlayerManager {
   constructor() {
     this.audio = null;
     this.state = PlayerState.IDLE;
+    this.errorReason = null;
+    /** Consecutive failed connection attempts. */
+    this.attempts = 0;
+
     this._connectTimer = null;
     this._retryTimer = null;
-    this._retryCount = 0;
+    this._volumeTimer = null;
+    this._volume = null;
     this._teardown = false;
+    this._gestureRetryUsed = false;
   }
 
   get isPlaying() {
     return this.state === PlayerState.PLAYING;
   }
 
-  getVolume() {
-    return game.settings.get("shoutcast-player-v2", "volume");
+  /** True once we have failed often enough that the server itself is suspect. */
+  get looksUnreachable() {
+    return this.attempts >= UNREACHABLE_AFTER;
   }
 
-  _setState(newState) {
-    if (this.state === newState) return;
+  getStreamUrl() {
+    return String(game.settings.get(MODULE_ID, "streamUrl") ?? "").trim();
+  }
+
+  getVolume() {
+    // Prefer the in-flight slider value; the stored setting lags behind it by
+    // up to VOLUME_SAVE_DELAY and would make a mid-drag re-render snap back.
+    return this._volume ?? game.settings.get(MODULE_ID, "volume");
+  }
+
+  render() {
+    const app = Object.values(ui.windows).find((w) => w.id === APP_ID);
+    app?.render(false);
+  }
+
+  /** @returns {boolean} whether the state actually changed. */
+  _setState(newState, reason = null) {
+    this.errorReason = reason;
+    if (this.state === newState) return false;
     this.state = newState;
     console.log(`Stream Player | State → ${newState}`);
-    const app = Object.values(ui.windows).find(
-      (w) => w.id === "stream-player-app",
-    );
-    app?.render(false);
+    this.render();
+    return true;
   }
 
   _clearConnectTimer() {
@@ -60,13 +112,54 @@ class StreamPlayerManager {
 
   _scheduleRetry() {
     this._clearRetryTimer();
+    const index = Math.max(
+      0,
+      Math.min(this.attempts - 1, RETRY_DELAYS.length - 1),
+    );
+    const delay = RETRY_DELAYS[index];
+    console.log(
+      `Stream Player | Attempt ${this.attempts} failed; retrying in ${delay / 1000}s`,
+    );
     this._retryTimer = setTimeout(() => {
       this._retryTimer = null;
-      if (this.state === PlayerState.NO_SIGNAL) {
-        this._retryCount++;
-        this._tryConnect();
-      }
-    }, 15000);
+      if (this.state === PlayerState.NO_SIGNAL) this._tryConnect();
+    }, delay);
+  }
+
+  /**
+   * A connection attempt failed in a way that is worth retrying. Stay in
+   * no-signal and keep going: the common case is waiting for a DJ to go live,
+   * which can take as long as it takes. The user can always press Stop.
+   */
+  _connectFailed() {
+    this._clearConnectTimer();
+    this.attempts++;
+    // The attempt count changes the on-screen copy even when the state does not.
+    if (!this._setState(PlayerState.NO_SIGNAL)) this.render();
+    this._scheduleRetry();
+  }
+
+  /**
+   * Browsers refuse play() without a user gesture, which is exactly the case
+   * when a GM's socket command starts the stream on somebody else's client.
+   * Park in 'blocked' and let Foundry's own gesture watcher resume us — once
+   * only, so a browser that stays locked cannot spin.
+   */
+  _autoplayBlocked() {
+    this._clearConnectTimer();
+    this._clearRetryTimer();
+    this._setState(PlayerState.BLOCKED);
+
+    if (this._gestureRetryUsed) return;
+    this._gestureRetryUsed = true;
+    game.audio?.awaitFirstGesture?.()?.then(() => {
+      if (this.state === PlayerState.BLOCKED) this._tryConnect();
+    });
+  }
+
+  /** http:// media on an https:// page is blocked outright by the browser. */
+  _isMixedContent(url) {
+    return window.location.protocol === "https:" && url.startsWith("http://");
   }
 
   initialize() {
@@ -76,86 +169,99 @@ class StreamPlayerManager {
     this.audio.preload = "none";
     this.audio.volume = this.getVolume();
 
+    // 'playing' is the only event that proves audio is actually audible.
+    // 'canplay' merely means data is buffered, which is also true when autoplay
+    // has been blocked — reacting to it used to report LIVE over silence.
     this.audio.addEventListener("playing", () => {
       this._clearConnectTimer();
-      this._retryCount = 0;
+      this.attempts = 0;
       this._setState(PlayerState.PLAYING);
     });
 
-    this.audio.addEventListener("canplay", () => {
-      if (this.state === PlayerState.CONNECTING) {
-        this._clearConnectTimer();
-        this._retryCount = 0;
-        this._setState(PlayerState.PLAYING);
-      }
+    this.audio.addEventListener("pause", () => {
+      // load() fires 'pause' on a playing element, so only a deliberate
+      // teardown means idle. Reacting to every pause used to knock us out of
+      // 'connecting' mid-reconnect and defeat the connect timeout's own guard.
+      if (this._teardown) this._setState(PlayerState.IDLE);
     });
 
-    this.audio.addEventListener("pause", () => {
-      if (this.state !== PlayerState.IDLE) {
-        this._setState(PlayerState.IDLE);
-      }
+    // A broadcaster disconnecting cleanly ends the stream rather than erroring,
+    // which otherwise left the window reading LIVE over a dead mount forever.
+    this.audio.addEventListener("ended", () => {
+      if (this._teardown) return;
+      console.warn("Stream Player | Stream ended; reconnecting");
+      this._connectFailed();
     });
 
     this.audio.addEventListener("error", () => {
-      if (this._teardown) return; // raised by our own stopLocal() teardown
-      this._clearConnectTimer();
+      if (this._teardown) return;
       const err = this.audio?.error;
       if (!err) return;
-      console.error(
-        `Stream Player | MediaError code=${err.code}:`,
-        err.message,
+      // Aborted means we replaced the source ourselves.
+      if (err.code === MediaError.MEDIA_ERR_ABORTED) return;
+      console.warn(
+        `Stream Player | MediaError code=${err.code}: ${err.message}`,
       );
-
-      // MEDIA_ERR_SRC_NOT_SUPPORTED (4): mount not found — Mixxx likely not broadcasting yet
-      // MEDIA_ERR_NETWORK (2): network failure — server itself may be down
-      if (err.code === MediaError.MEDIA_ERR_SRC_NOT_SUPPORTED) {
-        this._setState(PlayerState.NO_SIGNAL);
-        this._scheduleRetry();
-      } else {
-        this._setState(PlayerState.ERROR);
-      }
+      this._connectFailed();
     });
   }
 
   _tryConnect() {
-    const streamUrl = game.settings.get("shoutcast-player-v2", "streamUrl");
+    const streamUrl = this.getStreamUrl();
     if (!streamUrl || !this.audio) return;
 
+    this._clearConnectTimer();
     this._teardown = false;
     this._setState(PlayerState.CONNECTING);
     this.audio.src = streamUrl;
     this.audio.load();
 
-    // If no 'playing' event within 8s, assume no signal
     this._connectTimer = setTimeout(() => {
       this._connectTimer = null;
-      if (this.state === PlayerState.CONNECTING) {
-        console.warn("Stream Player | Connection timed out — no signal");
-        this._setState(PlayerState.NO_SIGNAL);
-        this._scheduleRetry();
-      }
-    }, 8000);
+      if (this.state !== PlayerState.CONNECTING) return;
+      console.warn("Stream Player | Connection timed out");
+      this._connectFailed();
+    }, CONNECT_TIMEOUT);
 
     this.audio.play().catch((err) => {
-      if (err.name === "AbortError") return; // Normal when src changes before play resolves
+      if (err.name === "AbortError") return; // src changed before play() settled
+      if (err.name === "NotAllowedError") return this._autoplayBlocked();
       console.error("Stream Player | Play rejected:", err);
       this._clearConnectTimer();
-      this._setState(PlayerState.ERROR);
+      this._setState(PlayerState.ERROR, ErrorReason.PLAY_REJECTED);
     });
   }
 
-  /** Start the local stream without touching other clients. */
-  playLocal() {
-    const streamUrl = game.settings.get("shoutcast-player-v2", "streamUrl");
+  /**
+   * Start the local stream without touching other clients.
+   * @param {object}  [options]
+   * @param {boolean} [options.resetAttempts=true] Forget the failure history.
+   */
+  playLocal({ resetAttempts = true } = {}) {
+    const streamUrl = this.getStreamUrl();
     if (!streamUrl) {
       ui.notifications.warn(
         "Audio Stream URL is not configured. Check Module Settings.",
       );
       return;
     }
+
+    if (this._isMixedContent(streamUrl)) {
+      console.error(
+        "Stream Player | Refusing an http:// stream on an https:// page — the browser would block it as mixed content",
+      );
+      this._clearConnectTimer();
+      this._clearRetryTimer();
+      if (!this._setState(PlayerState.ERROR, ErrorReason.MIXED_CONTENT)) {
+        this.render();
+      }
+      return;
+    }
+
     this.initialize();
     this._clearRetryTimer();
-    this._retryCount = 0;
+    if (resetAttempts) this.attempts = 0;
+    this._gestureRetryUsed = false;
     this._tryConnect();
   }
 
@@ -165,27 +271,19 @@ class StreamPlayerManager {
   }
 
   /**
-   * Mirror GM transport actions to players. Only the originating client emits:
-   * incoming commands run through playLocal/stopLocal so that two GMs (or a GM
-   * and an assistant, who both satisfy isGM) cannot bounce an action back and
-   * forth between each other forever.
+   * Manual "try again now". Keeps the attempt count so the window does not
+   * forget that the server has been failing for a while.
    */
-  _broadcast(action) {
-    if (!game.user.isGM) return;
-    game.socket.emit("module.shoutcast-player-v2", { action });
-  }
-
   retry() {
-    this._clearRetryTimer();
-    this._retryCount++;
-    this._tryConnect();
+    this.playLocal({ resetAttempts: false });
   }
 
   /** Tear down the local stream without touching other clients. */
   stopLocal() {
     this._clearConnectTimer();
     this._clearRetryTimer();
-    this._retryCount = 0;
+    this.attempts = 0;
+    this._gestureRetryUsed = false;
 
     if (this.audio) {
       this._teardown = true;
@@ -205,9 +303,33 @@ class StreamPlayerManager {
     this._broadcast("stop");
   }
 
+  /**
+   * Mirror GM transport actions to players. Only the originating client emits:
+   * incoming commands run through playLocal/stopLocal so that two GMs (or a GM
+   * and an assistant, who both satisfy isGM) cannot bounce an action back and
+   * forth between each other forever.
+   */
+  _broadcast(action) {
+    if (!game.user.isGM) return;
+    game.socket.emit(`module.${MODULE_ID}`, { action });
+  }
+
   setVolume(volume) {
+    this._volume = volume;
     if (this.audio) this.audio.volume = volume;
-    game.settings.set("shoutcast-player-v2", "volume", volume);
+
+    // The slider fires on every pixel of travel; only persist once it settles.
+    if (this._volumeTimer) clearTimeout(this._volumeTimer);
+    this._volumeTimer = setTimeout(() => {
+      this._volumeTimer = null;
+      game.settings.set(MODULE_ID, "volume", volume);
+    }, VOLUME_SAVE_DELAY);
+  }
+
+  /** The GM changed the world stream URL; follow it if we are mid-stream. */
+  onStreamUrlChanged() {
+    if (this.state === PlayerState.IDLE) this.render();
+    else this.playLocal();
   }
 }
 
@@ -219,9 +341,9 @@ window.streamPlayer = new StreamPlayerManager();
 class StreamPlayerApp extends Application {
   static get defaultOptions() {
     return foundry.utils.mergeObject(super.defaultOptions, {
-      id: "stream-player-app",
+      id: APP_ID,
       title: "Audio Stream",
-      template: "modules/shoutcast-player-v2/templates/player.hbs",
+      template: `modules/${MODULE_ID}/templates/player.hbs`,
       classes: ["app", "window-app"],
       width: 340,
       height: "auto",
@@ -230,17 +352,36 @@ class StreamPlayerApp extends Application {
   }
 
   getData() {
-    const { state } = window.streamPlayer;
+    const player = window.streamPlayer;
+    const { state } = player;
+    const isIdle = state === PlayerState.IDLE;
+    const isNoSignal = state === PlayerState.NO_SIGNAL;
+    const isBlocked = state === PlayerState.BLOCKED;
+    const isError = state === PlayerState.ERROR;
+
     return {
-      streamUrl: game.settings.get("shoutcast-player-v2", "streamUrl"),
+      streamUrl: player.getStreamUrl(),
       isGM: game.user.isGM,
       state,
-      isIdle: state === PlayerState.IDLE,
+      isIdle,
       isConnecting: state === PlayerState.CONNECTING,
       isPlaying: state === PlayerState.PLAYING,
-      isNoSignal: state === PlayerState.NO_SIGNAL,
-      isError: state === PlayerState.ERROR,
-      currentVolume: Math.round(window.streamPlayer.getVolume() * 100),
+      isNoSignal,
+      isBlocked,
+      isError,
+      isMixedContent: player.errorReason === ErrorReason.MIXED_CONTENT,
+      looksUnreachable: player.looksUnreachable,
+      attempts: player.attempts,
+
+      // Transport. Stop is offered in every non-idle state so the retry loop
+      // can always be cancelled — it used to be playing-only, so once the
+      // player entered no-signal it retried forever with no way out.
+      showPlay: isIdle || isBlocked,
+      showRetry: isNoSignal || isError,
+      showStop: !isIdle,
+      retryLabel: isNoSignal ? "Retry Now" : "Retry",
+
+      currentVolume: Math.round(player.getVolume() * 100),
     };
   }
 
@@ -262,16 +403,20 @@ class StreamPlayerApp extends Application {
 Hooks.once("init", () => {
   console.log("Stream Player | Initializing");
 
-  game.settings.register("shoutcast-player-v2", "streamUrl", {
+  game.settings.register(MODULE_ID, "streamUrl", {
     name: "Stream URL",
-    hint: "Full URL of your Icecast/SHOUTcast audio stream (e.g., http://your.stream.ip:8000/stream)",
-    scope: "client",
+    hint: "Full URL of your Icecast/SHOUTcast audio stream (e.g. https://your.stream.host:8000/stream). Shared by everyone in the world.",
+    // World-scoped: GM sync tells every client to play, so every client has to
+    // resolve the same URL. As a client setting, players who had never filled
+    // it in just got a "not configured" warning instead of audio.
+    scope: "world",
     config: true,
     type: String,
     default: "",
+    onChange: () => window.streamPlayer.onStreamUrlChanged(),
   });
 
-  game.settings.register("shoutcast-player-v2", "volume", {
+  game.settings.register(MODULE_ID, "volume", {
     name: "Stream Volume",
     hint: "Volume level for the stream (saved per client).",
     scope: "client",
@@ -284,9 +429,9 @@ Hooks.once("init", () => {
 Hooks.once("ready", () => {
   window.streamPlayer.initialize();
 
-  game.socket.on("module.shoutcast-player-v2", (data) => {
-    console.log("Stream Player | Socket command:", data.action);
-    switch (data.action) {
+  game.socket.on(`module.${MODULE_ID}`, (data) => {
+    console.log("Stream Player | Socket command:", data?.action);
+    switch (data?.action) {
       case "play":
         window.streamPlayer.playLocal();
         break;
@@ -310,14 +455,9 @@ Hooks.on("getSceneControlButtons", (controls) => {
     visible: true,
     // v13+ SceneControlTool defines onChange only; onClick is not in the API.
     onChange: () => {
-      const existing = Object.values(ui.windows).find(
-        (w) => w.id === "stream-player-app",
-      );
-      if (existing) {
-        existing.close();
-      } else {
-        new StreamPlayerApp().render(true);
-      }
+      const existing = Object.values(ui.windows).find((w) => w.id === APP_ID);
+      if (existing) existing.close();
+      else new StreamPlayerApp().render(true);
     },
   };
   console.log("Stream Player | Tool registered");

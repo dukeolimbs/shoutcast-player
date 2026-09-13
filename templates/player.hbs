@@ -11,6 +11,9 @@
       {{else if isNoSignal}}
         <i class="fas fa-exclamation-triangle"></i>
         <span>No Signal &mdash; retrying&hellip;</span>
+      {{else if isBlocked}}
+        <i class="fas fa-hand"></i>
+        <span>Waiting for you</span>
       {{else if isError}}
         <i class="fas fa-times-circle"></i>
         <span>Connection Failed</span>
@@ -21,15 +24,38 @@
     </div>
 
     {{#if isNoSignal}}
+      {{#if looksUnreachable}}
+        <p class="stream-info-msg stream-error-msg">
+          Still no stream after {{attempts}} attempts. Check that the server is
+          running and reachable &mdash; retrying in the background.
+        </p>
+      {{else}}
+        <p class="stream-info-msg">
+          The stream is not broadcasting yet. Waiting for an audio source&hellip;
+        </p>
+      {{/if}}
+    {{/if}}
+
+    {{#if isBlocked}}
       <p class="stream-info-msg">
-        The stream is not broadcasting yet. Waiting for audio source&hellip;
+        Your browser will not start audio until you interact with the page.
+        Press Play to listen.
       </p>
     {{/if}}
 
     {{#if isError}}
-      <p class="stream-info-msg stream-error-msg">
-        Cannot reach the stream server. Check that Icecast is running.
-      </p>
+      {{#if isMixedContent}}
+        <p class="stream-info-msg stream-error-msg">
+          This stream uses <strong>http://</strong> but Foundry is served over
+          <strong>https://</strong>, so the browser blocks it. Serve the stream
+          over https, or run Foundry over http.
+        </p>
+      {{else}}
+        <p class="stream-info-msg stream-error-msg">
+          The browser refused to play this stream. See the console (F12) for
+          details.
+        </p>
+      {{/if}}
     {{/if}}
 
     <div class="form-group buttons stream-buttons">
@@ -38,28 +64,24 @@
           <i class="fas fa-spinner fa-spin"></i>
           Connecting&hellip;
         </button>
-      {{else if isPlaying}}
-        <button type="button" id="stop-stream">
-          <i class="fas fa-stop"></i>
-          Stop
-        </button>
-      {{else}}
+      {{/if}}
+      {{#if showPlay}}
         <button type="button" id="play-stream">
           <i class="fas fa-play"></i>
           Play
         </button>
-        {{#if isNoSignal}}
-          <button type="button" id="retry-stream">
-            <i class="fas fa-redo"></i>
-            Retry Now
-          </button>
-        {{/if}}
-        {{#if isError}}
-          <button type="button" id="retry-stream">
-            <i class="fas fa-redo"></i>
-            Retry
-          </button>
-        {{/if}}
+      {{/if}}
+      {{#if showRetry}}
+        <button type="button" id="retry-stream">
+          <i class="fas fa-redo"></i>
+          {{retryLabel}}
+        </button>
+      {{/if}}
+      {{#if showStop}}
+        <button type="button" id="stop-stream">
+          <i class="fas fa-stop"></i>
+          Stop
+        </button>
       {{/if}}
     </div>
 
@@ -87,9 +109,14 @@
       Audio Stream URL is not configured.
     </div>
     <p style="margin-top: 10px;">
-      Go to
-      <strong>Game Settings &rarr; SHOUTcast Player</strong>
-      to set the stream URL.
+      {{#if isGM}}
+        Go to
+        <strong>Game Settings &rarr; SHOUTcast Player</strong>
+        to set the stream URL.
+      {{else}}
+        Ask your GM to set the stream URL in
+        <strong>Game Settings &rarr; SHOUTcast Player</strong>.
+      {{/if}}
     </p>
   {{/if}}
 </form>
