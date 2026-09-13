@@ -90,6 +90,13 @@ symlink the repo into your Foundry `Data/modules/` folder:
 ln -s /path/to/shoutcast-player-v2 ".../FoundryVTT/Data/modules/shoutcast-player-v2"
 ```
 
+Edits to JS, CSS and templates only need a browser reload. **Edits to
+`module.json` need Foundry itself restarted** — return to Setup, or restart the
+server — because manifests are parsed at startup and a reload keeps serving the
+cached copy. Until you do, a newly declared socket namespace or language file is
+simply absent, which shows up as GM sync doing nothing and the UI rendering raw
+`SHOUTCAST.*` keys. The module warns about both cases in the console on startup.
+
 The player is reachable from macros and the console:
 
 ```js

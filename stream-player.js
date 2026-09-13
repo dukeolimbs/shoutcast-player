@@ -457,6 +457,7 @@ Hooks.once("init", () => {
 
 Hooks.once("ready", () => {
   streamPlayer.initialize();
+  checkManifestLoaded();
 
   game.socket.on(`module.${MODULE_ID}`, (data) => {
     console.log("Stream Player | Socket command:", data?.action);
@@ -470,6 +471,32 @@ Hooks.once("ready", () => {
     }
   });
 });
+
+/**
+ * Both the socket namespace and the translation table are granted by
+ * module.json, which Foundry parses at server start -- not on a browser
+ * reload. Editing the manifest and pressing F5 leaves a stale copy in play,
+ * and both failures are otherwise silent: emits vanish, and the UI renders
+ * raw localization keys. Say so rather than letting it be mysterious.
+ */
+function checkManifestLoaded() {
+  const manifest = game.modules.get(MODULE_ID);
+
+  // Explicitly false, not just missing: if a future version stops exposing the
+  // field client-side we would rather stay quiet than cry wolf.
+  if (manifest?.socket === false) {
+    console.warn(
+      "Stream Player | The manifest does not grant a socket namespace, so GM sync will do nothing. If you just edited module.json, restart Foundry (return to Setup) so it is re-read.",
+    );
+  }
+
+  const probe = "SHOUTCAST.App.Title";
+  if (game.i18n.localize(probe) === probe) {
+    console.warn(
+      "Stream Player | Translations are not loaded, so the UI will show raw keys like SHOUTCAST.App.Title. If you just added lang/en.json to the manifest, restart Foundry (return to Setup) so it is re-read.",
+    );
+  }
+}
 
 Hooks.on("getSceneControlButtons", (controls) => {
   if (!controls.tokens?.tools) return;

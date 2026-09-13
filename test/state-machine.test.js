@@ -17,7 +17,7 @@ const path = require("path");
 const ROOT = path.resolve(__dirname, "..");
 const SRC = path.join(ROOT, "stream-player.js");
 
-function build({ isGM = true, https = false, url = "http://stream.test:8000/live" } = {}) {
+function build({ isGM = true, https = false, url = "http://stream.test:8000/live", socket, translations } = {}) {
   const emitted = [];
   const notifications = [];
   const logs = [];
@@ -80,7 +80,7 @@ function build({ isGM = true, https = false, url = "http://stream.test:8000/live
     ["shoutcast-player-v2.volume", 0.5],
   ]);
 
-  const moduleEntry = {};
+  const moduleEntry = socket === undefined ? {} : { socket };
   const sandbox = {
     console: {
       log: (...a) => logs.push(a.join(" ")),
@@ -100,7 +100,10 @@ function build({ isGM = true, https = false, url = "http://stream.test:8000/live
     game: {
       user: { isGM },
       modules: { get: () => moduleEntry },
-      i18n: { localize: (k) => k, format: (k) => k },
+      i18n: {
+        localize: (k) => (translations && k in translations ? translations[k] : k),
+        format: (k) => k,
+      },
       audio: { awaitFirstGesture: () => new Promise(() => {}) },
       settings: {
         register() {},
@@ -376,6 +379,27 @@ test("Template variables all come from _prepareContext", async () => {
   const manifest = JSON.parse(fs.readFileSync(path.join(ROOT, "module.json"), "utf8"));
   check("manifest declares the socket namespace", manifest.socket === true);
   check("manifest registers the language file", (manifest.languages || []).length === 1);
+});
+
+
+test("Stale manifest data announces itself", () => {
+  const healthy = build({
+    socket: true,
+    translations: JSON.parse(fs.readFileSync(path.join(ROOT, "lang", "en.json"), "utf8")),
+  });
+  const quiet = healthy.logs.filter((l) => l.startsWith("WARN") && l.includes("restart Foundry"));
+  check("healthy manifest warns about nothing", quiet.length === 0, quiet.join(" | "));
+
+  const stale = build({ socket: false });
+  const warns = stale.logs.filter((l) => l.includes("restart Foundry"));
+  check("missing socket namespace is reported",
+    warns.some((l) => l.includes("GM sync")), warns.join(" | "));
+  check("missing translations are reported",
+    warns.some((l) => l.includes("raw keys")), warns.join(" | "));
+
+  const unknown = build();
+  const socketWarn = unknown.logs.filter((l) => l.includes("GM sync"));
+  check("no false alarm when the field is absent", socketWarn.length === 0, socketWarn.join(" | "));
 });
 
 test("Module API is exposed", () => {

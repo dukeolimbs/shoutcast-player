@@ -41,6 +41,7 @@ covered — the ApplicationV2 window still needs verifying in a live game.
 | 18 | `window.streamPlayer` global instead of the module API. | Fixed — `game.modules.get(id).api`, global kept as an alias so existing macros survive |
 | 19 | `.gitattributes` declared `packs/** binary` for a directory that does not exist. | Fixed |
 | 20 | Release zip omitted `lang/` and `CHANGELOG.md`. | Fixed |
+| 21 | A missing socket namespace or language table failed silently — emits vanished and the UI rendered raw keys, with nothing to say why. This is how #1 hid for two releases. | Fixed — startup diagnostic |
 
 ## Deliberately not done
 
