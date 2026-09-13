@@ -41,6 +41,7 @@ covered — the ApplicationV2 window still needs verifying in a live game.
 | 18 | `window.streamPlayer` global instead of the module API. | Fixed — `game.modules.get(id).api`, global kept as an alias so existing macros survive |
 | 19 | `.gitattributes` declared `packs/** binary` for a directory that does not exist. | Fixed |
 | 20 | Release zip omitted `lang/` and `CHANGELOG.md`. | Fixed |
+| 22 | **An idle Icecast mount reported "Connection Failed — the browser refused to play this stream".** A load failure rejects `play()` with `NotSupportedError` *and* fires an `error` event; the rejection fell through to the terminal branch and raced the error handler, so whichever landed last won. Waiting for a broadcaster is the single most common state this module is in. | Fixed |
 | 21 | A missing socket namespace or language table failed silently — emits vanished and the UI rendered raw keys, with nothing to say why. This is how #1 hid for two releases. | Fixed — startup diagnostic |
 
 ## Deliberately not done

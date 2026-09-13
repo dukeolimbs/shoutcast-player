@@ -54,9 +54,9 @@ extract it into your Foundry `Data/modules/` folder as `shoutcast-player-v2`.
 | --- | --- |
 | **Connecting…** | Attempting to reach the stream (8s timeout). |
 | **LIVE** | Audio is confirmed playing. |
-| **No Signal — retrying…** | Could not get audio. Reconnects on its own (15s → 60s backoff); **Retry Now** forces an immediate attempt. After four failures the message stops assuming the broadcaster is simply offline and points at the server. |
+| **No Signal — retrying…** | Nothing is coming through yet — normally because nobody is broadcasting. Reconnects on its own (15s → 60s backoff); **Retry Now** forces an immediate attempt. This is an ordinary waiting state, not a fault. |
 | **Waiting for you** | Your browser will not start audio until you interact with the page — normally when the GM starts the stream remotely. Press **Play**. |
-| **Connection Failed** | Something the module cannot retry past, such as a mixed-content block. The window explains which. |
+| **Connection Failed** | A configuration problem that retrying cannot fix — in practice, a mixed-content block. The window explains it. Anything that might resolve on its own stays in *No Signal* instead. |
 
 **Stop** is available in every state except idle, so an auto-retry loop can
 always be cancelled.

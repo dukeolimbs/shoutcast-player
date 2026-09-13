@@ -10,9 +10,11 @@ const PlayerState = Object.freeze({
   ERROR: "error",
 });
 
+// The only genuinely terminal failure: it cannot be retried past and the fix is
+// a configuration change. Everything else that goes wrong while connecting is
+// treated as "not broadcasting yet" and retried.
 const ErrorReason = Object.freeze({
   MIXED_CONTENT: "mixed-content",
-  PLAY_REJECTED: "play-rejected",
 });
 
 /** How long to wait for the 'playing' event before calling a connect failed. */
@@ -59,6 +61,7 @@ class StreamPlayerManager {
     this._volumeTimer = null;
     this._volume = null;
     this._teardown = false;
+    this._attemptFailed = false;
     this._gestureRetryUsed = false;
   }
 
@@ -132,6 +135,12 @@ class StreamPlayerManager {
    * which can take as long as it takes. The user can always press Stop.
    */
   _connectFailed() {
+    // A failed load announces itself twice: an 'error' event on the element and
+    // a rejected play() promise. Count the attempt once, or the backoff skips a
+    // step and the window claims twice as many failures as really happened.
+    if (this._attemptFailed) return;
+    this._attemptFailed = true;
+
     this._clearConnectTimer();
     this.attempts++;
     // The attempt count changes the on-screen copy even when the state does not.
@@ -212,6 +221,7 @@ class StreamPlayerManager {
 
     this._clearConnectTimer();
     this._teardown = false;
+    this._attemptFailed = false;
     this._setState(PlayerState.CONNECTING);
     this.audio.src = streamUrl;
     this.audio.load();
@@ -226,9 +236,18 @@ class StreamPlayerManager {
     this.audio.play().catch((err) => {
       if (err.name === "AbortError") return; // src changed before play() settled
       if (err.name === "NotAllowedError") return this._autoplayBlocked();
-      console.error("Stream Player | Play rejected:", err);
-      this._clearConnectTimer();
-      this._setState(PlayerState.ERROR, ErrorReason.PLAY_REJECTED);
+
+      // Everything else means the resource would not load. NotSupportedError is
+      // what an Icecast mount with no source attached produces, which is the
+      // ordinary "the DJ is not live yet" case -- not a browser refusing the
+      // stream. Treat any other rejection the same way: during a connection
+      // attempt there is nothing the listener can act on, and crying failure at
+      // someone who simply started Foundry before the broadcast is worse than
+      // quietly trying again. Details still go to the console.
+      console.warn(
+        `Stream Player | play() rejected: ${err.name}: ${err.message}`,
+      );
+      this._connectFailed();
     });
   }
 

@@ -7,6 +7,12 @@ Full triage in [`ISSUES.md`](ISSUES.md).
 
 ### Fixed
 
+- **An idle stream server no longer reads as a failure.** With nothing being
+  broadcast, the window said *Connection Failed — the browser refused to play
+  this stream*. That is the most common state this module sits in, and it is
+  not an error: it now shows *No Signal* and keeps reconnecting quietly. The
+  escalated message after several attempts is no longer red and no longer
+  assumes something is broken.
 - **GM sync now works at all.** The manifest was missing `"socket": true`, so
   Foundry silently refused to relay the module's socket namespace. Play/Stop
   never reached other clients.

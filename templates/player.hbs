@@ -25,7 +25,7 @@
 
     {{#if isNoSignal}}
       {{#if looksUnreachable}}
-        <p class="stream-info-msg stream-error-msg">
+        <p class="stream-info-msg">
           {{localize "SHOUTCAST.Message.Unreachable" attempts=attempts}}
         </p>
       {{else}}
@@ -46,7 +46,7 @@
         {{#if isMixedContent}}
           {{localize "SHOUTCAST.Message.MixedContent"}}
         {{else}}
-          {{localize "SHOUTCAST.Message.PlayRejected"}}
+          {{localize "SHOUTCAST.Message.Failed"}}
         {{/if}}
       </p>
     {{/if}}

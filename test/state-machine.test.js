@@ -207,10 +207,13 @@ test("Reconnect backoff and escalation", () => {
   const h = build();
   h.player.play();
   const delays = [];
+  const lastDelay = () =>
+    Number(h.logs.filter((l) => l.includes("retrying in")).pop().match(/retrying in (\d+)s/)[1]);
+
   for (let i = 0; i < 6; i++) {
     h.audio().fireError(4, "not supported");
-    const line = h.logs.filter((l) => l.includes("retrying in")).pop();
-    delays.push(Number(line.match(/retrying in (\d+)s/)[1]));
+    delays.push(lastDelay());
+    if (i < 5) h.player.retry();   // begin the next attempt
   }
   check("backoff is 15,15,30,30,60,60", delays.join(",") === "15,15,30,30,60,60", delays.join(","));
   check("stays in no-signal", h.player.state === "no-signal", h.player.state);
@@ -218,6 +221,14 @@ test("Reconnect backoff and escalation", () => {
   check("attempt count tracks failures", h.player.attempts === 6, String(h.player.attempts));
 });
 
+test("One failed attempt counts once, however many ways it is reported", () => {
+  const h = build();
+  h.player.play();
+  h.audio().fireError(4, "not supported");
+  h.audio().fireError(4, "not supported");
+  h.audio().fireError(2, "network");
+  check("attempts incremented once", h.player.attempts === 1, String(h.player.attempts));
+});
 test("Stop cancels a pending reconnect", () => {
   const h = build();
   h.player.play();
@@ -400,6 +411,50 @@ test("Stale manifest data announces itself", () => {
   const unknown = build();
   const socketWarn = unknown.logs.filter((l) => l.includes("GM sync"));
   check("no false alarm when the field is absent", socketWarn.length === 0, socketWarn.join(" | "));
+});
+
+
+asyncTests.push(async () => {
+  console.log("\nAn empty mount is no-signal, not a browser refusal");
+  const h = build();
+  h.player.initialize();
+  // What Chrome and Firefox actually produce when the mount has no source.
+  h.audio().playBehaviour = () =>
+    Promise.reject(Object.assign(new Error("no supported source"), { name: "NotSupportedError" }));
+
+  h.player.play();
+  await new Promise((r) => setImmediate(r));
+  check("lands in no-signal", h.player.state === "no-signal", h.player.state);
+  check("not a terminal error", h.player.state !== "error", h.player.state);
+  check("no error reason set", !h.player.errorReason, String(h.player.errorReason));
+  check("a retry is scheduled", h.logs.some((l) => l.includes("retrying in")));
+});
+
+asyncTests.push(async () => {
+  console.log("\nThe error event and the play() rejection agree");
+  const h = build();
+  h.player.initialize();
+  h.audio().playBehaviour = () => {
+    // The browser fires both for one failed load.
+    h.audio().fireError(4, "no supported source");
+    return Promise.reject(Object.assign(new Error("x"), { name: "NotSupportedError" }));
+  };
+  h.player.play();
+  await new Promise((r) => setImmediate(r));
+  check("still no-signal after both signals", h.player.state === "no-signal", h.player.state);
+  check("counted as a single attempt", h.player.attempts === 1, String(h.player.attempts));
+});
+
+asyncTests.push(async () => {
+  console.log("\nAn unexpected rejection is still retried, not fatal");
+  const h = build();
+  h.player.initialize();
+  h.audio().playBehaviour = () =>
+    Promise.reject(Object.assign(new Error("?"), { name: "SomethingNewError" }));
+  h.player.play();
+  await new Promise((r) => setImmediate(r));
+  check("retryable rather than terminal", h.player.state === "no-signal", h.player.state);
+  check("logged for diagnosis", h.logs.some((l) => l.includes("SomethingNewError")));
 });
 
 test("Module API is exposed", () => {
