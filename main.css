@@ -1,21 +1,38 @@
 /* ============================================================
-   STREAM PLAYER MODULE — Foundry VTT v14
+   SHOUTCAST PLAYER — Foundry VTT v13+
    ============================================================ */
 
+/* v13 replaced the old core palette: --color-text-light-primary,
+   --color-background-application, --color-form-field-highlight and
+   --color-border-dark-primary no longer resolve, so declarations using them
+   were being dropped on the floor. Resolve through the current names and fall
+   back to the legacy ones, then to a literal, so the window looks right on
+   either generation rather than silently inheriting whatever is behind it. */
 #stream-player-app {
-  background: rgba(25, 24, 19, 0.85);
-  border-color: var(--color-border-dark-primary);
-  color: var(--color-text-light-primary);
+  --sc-text: var(--color-text-primary, var(--color-text-light-primary, #f0eee6));
+  --sc-text-dim: var(
+    --color-text-secondary,
+    var(--color-text-light-secondary, #b9b7af)
+  );
+  --sc-border: var(
+    --color-border-dark-4,
+    var(--color-border-light-1, rgba(0, 0, 0, 0.45))
+  );
+  --sc-field: var(
+    --color-cool-4,
+    var(--color-form-field-highlight, rgba(0, 0, 0, 0.3))
+  );
+
+  --sc-live: #7ddf7d;
+  --sc-warn: #f0c040;
+  --sc-fail: #f08080;
+  --sc-wait: #8ec5ff;
+
+  color: var(--sc-text);
 }
 
 #stream-player-app .window-content {
-  background: var(--color-background-application);
   padding: 12px 14px;
-}
-
-#stream-player-app .window-header {
-  border-bottom: none;
-  box-shadow: none;
 }
 
 /* ── Status bar ─────────────────────────────────────────── */
@@ -30,32 +47,32 @@
   font-weight: bold;
   margin-bottom: 12px;
   background: rgba(0, 0, 0, 0.25);
-  color: var(--color-text-light-secondary);
+  color: var(--sc-text-dim);
 }
 
 #stream-player-app .stream-status.playing {
   background: rgba(0, 80, 0, 0.35);
-  color: #7ddf7d;
+  color: var(--sc-live);
 }
 
 #stream-player-app .stream-status.no-signal {
   background: rgba(90, 60, 0, 0.35);
-  color: #f0c040;
+  color: var(--sc-warn);
 }
 
 #stream-player-app .stream-status.error {
   background: rgba(90, 0, 0, 0.35);
-  color: #f08080;
+  color: var(--sc-fail);
 }
 
 #stream-player-app .stream-status.blocked {
   background: rgba(0, 40, 80, 0.35);
-  color: #8ec5ff;
+  color: var(--sc-wait);
 }
 
 #stream-player-app .stream-status.connecting {
   background: rgba(0, 40, 80, 0.35);
-  color: var(--color-text-light-primary);
+  color: var(--sc-text);
 }
 
 /* Pulsing live dot */
@@ -74,17 +91,24 @@
   }
 }
 
+@media (prefers-reduced-motion: reduce) {
+  #stream-player-app .stream-live-dot,
+  #stream-player-app .fa-spin {
+    animation: none;
+  }
+}
+
 /* ── Info / error messages ──────────────────────────────── */
 
 #stream-player-app .stream-info-msg {
   font-size: var(--font-size-12);
-  color: var(--color-text-light-secondary);
+  color: var(--sc-text-dim);
   font-style: italic;
   margin: 0 0 10px;
 }
 
 #stream-player-app .stream-error-msg {
-  color: #f08080;
+  color: var(--sc-fail);
 }
 
 /* ── Buttons ────────────────────────────────────────────── */
@@ -93,14 +117,17 @@
   justify-content: center;
   gap: 10px;
   margin: 0 0 12px;
+  flex-wrap: wrap;
 }
 
 #stream-player-app .stream-buttons button {
   font-size: var(--font-size-14);
-  background: var(--color-form-field-highlight);
-  border: 1px solid var(--color-border-light-primary);
-  color: var(--color-text-light-primary);
+  background: var(--sc-field);
+  border: 1px solid var(--sc-border);
+  color: var(--sc-text);
   padding: 5px 14px;
+  width: auto;
+  flex: 0 0 auto;
 }
 
 #stream-player-app .stream-buttons button:disabled {
@@ -115,13 +142,13 @@
 }
 
 #stream-player-app .stream-volume label {
-  color: var(--color-text-light-primary);
+  color: var(--sc-text);
   font-size: var(--font-size-14);
 }
 
 #stream-player-app .stream-volume-value {
   font-size: var(--font-size-12);
-  color: var(--color-text-light-secondary);
+  color: var(--sc-text-dim);
   min-width: 38px;
   text-align: right;
 }
@@ -130,8 +157,8 @@
 
 #stream-player-app p.notes {
   font-size: var(--font-size-11);
-  color: var(--color-text-light-secondary);
-  border-top: 1px solid var(--color-border-light-1);
+  color: var(--sc-text-dim);
+  border-top: 1px solid var(--sc-border);
   padding-top: 8px;
   margin-top: 4px;
   word-break: break-all;
@@ -140,12 +167,13 @@
 /* ── Not-configured warning ─────────────────────────────── */
 
 #stream-player-app .notification.warning {
-  color: var(--color-text-light-primary);
+  color: var(--sc-text);
   font-size: var(--font-size-14);
   margin: 10px 0;
 }
 
-#stream-player-app p {
-  color: var(--color-text-light-primary);
+#stream-player-app .stream-setup-hint {
+  color: var(--sc-text);
   font-size: var(--font-size-14);
+  margin-top: 10px;
 }

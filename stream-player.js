@@ -82,8 +82,8 @@ class StreamPlayerManager {
   }
 
   render() {
-    const app = Object.values(ui.windows).find((w) => w.id === APP_ID);
-    app?.render(false);
+    const app = foundry.applications.instances.get(APP_ID);
+    if (app?.rendered) app.render();
   }
 
   /** @returns {boolean} whether the state actually changed. */
@@ -240,9 +240,7 @@ class StreamPlayerManager {
   playLocal({ resetAttempts = true } = {}) {
     const streamUrl = this.getStreamUrl();
     if (!streamUrl) {
-      ui.notifications.warn(
-        "Audio Stream URL is not configured. Check Module Settings.",
-      );
+      ui.notifications.warn(game.i18n.localize("SHOUTCAST.Notify.NoUrl"));
       return;
     }
 
@@ -333,34 +331,59 @@ class StreamPlayerManager {
   }
 }
 
-window.streamPlayer = new StreamPlayerManager();
+const streamPlayer = new StreamPlayerManager();
+
+// Kept as a convenience alias so existing macros and console poking still
+// work; game.modules.get(MODULE_ID).api is the supported entry point.
+window.streamPlayer = streamPlayer;
+
+const { ApplicationV2, HandlebarsApplicationMixin } = foundry.applications.api;
 
 /**
- * Control window for the stream player
+ * Control window for the stream player.
  */
-class StreamPlayerApp extends Application {
-  static get defaultOptions() {
-    return foundry.utils.mergeObject(super.defaultOptions, {
-      id: APP_ID,
-      title: "Audio Stream",
-      template: `modules/${MODULE_ID}/templates/player.hbs`,
-      classes: ["app", "window-app"],
-      width: 340,
-      height: "auto",
+class StreamPlayerApp extends HandlebarsApplicationMixin(ApplicationV2) {
+  static DEFAULT_OPTIONS = {
+    id: APP_ID,
+    classes: ["shoutcast-player"],
+    position: { width: 340, height: "auto" },
+    window: {
+      title: "SHOUTCAST.App.Title",
+      icon: "fa-solid fa-radio",
       resizable: false,
-    });
+    },
+    actions: {
+      play: StreamPlayerApp.#onPlay,
+      stop: StreamPlayerApp.#onStop,
+      retry: StreamPlayerApp.#onRetry,
+    },
+  };
+
+  static PARTS = {
+    body: { template: `modules/${MODULE_ID}/templates/player.hbs` },
+  };
+
+  static #onPlay() {
+    streamPlayer.play();
   }
 
-  getData() {
-    const player = window.streamPlayer;
-    const { state } = player;
+  static #onStop() {
+    streamPlayer.stop();
+  }
+
+  static #onRetry() {
+    streamPlayer.retry();
+  }
+
+  async _prepareContext(options) {
+    const { state } = streamPlayer;
     const isIdle = state === PlayerState.IDLE;
     const isNoSignal = state === PlayerState.NO_SIGNAL;
     const isBlocked = state === PlayerState.BLOCKED;
     const isError = state === PlayerState.ERROR;
 
     return {
-      streamUrl: player.getStreamUrl(),
+      streamUrl: streamPlayer.getStreamUrl(),
       isGM: game.user.isGM,
       state,
       isIdle,
@@ -369,9 +392,9 @@ class StreamPlayerApp extends Application {
       isNoSignal,
       isBlocked,
       isError,
-      isMixedContent: player.errorReason === ErrorReason.MIXED_CONTENT,
-      looksUnreachable: player.looksUnreachable,
-      attempts: player.attempts,
+      isMixedContent: streamPlayer.errorReason === ErrorReason.MIXED_CONTENT,
+      looksUnreachable: streamPlayer.looksUnreachable,
+      attempts: streamPlayer.attempts,
 
       // Transport. Stop is offered in every non-idle state so the retry loop
       // can always be cancelled — it used to be playing-only, so once the
@@ -379,23 +402,23 @@ class StreamPlayerApp extends Application {
       showPlay: isIdle || isBlocked,
       showRetry: isNoSignal || isError,
       showStop: !isIdle,
-      retryLabel: isNoSignal ? "Retry Now" : "Retry",
+      retryLabel: isNoSignal
+        ? "SHOUTCAST.Button.RetryNow"
+        : "SHOUTCAST.Button.Retry",
 
-      currentVolume: Math.round(player.getVolume() * 100),
+      currentVolume: Math.round(streamPlayer.getVolume() * 100),
     };
   }
 
-  activateListeners(html) {
-    super.activateListeners(html);
-
-    html.find("#play-stream").click(() => window.streamPlayer.play());
-    html.find("#stop-stream").click(() => window.streamPlayer.stop());
-    html.find("#retry-stream").click(() => window.streamPlayer.retry());
-
-    html.find("#volume-control").on("input", (e) => {
-      const volume = parseInt(e.target.value, 10);
-      window.streamPlayer.setVolume(volume / 100);
-      html.find("#volume-display").text(`${volume}%`);
+  _onRender(context, options) {
+    // Buttons are wired through DEFAULT_OPTIONS.actions; the slider is not,
+    // because it needs the live 'input' event rather than a click.
+    const slider = this.element.querySelector("#volume-control");
+    const display = this.element.querySelector("#volume-display");
+    slider?.addEventListener("input", (event) => {
+      const volume = Number(event.target.value);
+      streamPlayer.setVolume(volume / 100);
+      if (display) display.textContent = `${volume}%`;
     });
   }
 }
@@ -403,9 +426,15 @@ class StreamPlayerApp extends Application {
 Hooks.once("init", () => {
   console.log("Stream Player | Initializing");
 
+  game.modules.get(MODULE_ID).api = {
+    player: streamPlayer,
+    app: StreamPlayerApp,
+    PlayerState,
+  };
+
   game.settings.register(MODULE_ID, "streamUrl", {
-    name: "Stream URL",
-    hint: "Full URL of your Icecast/SHOUTcast audio stream (e.g. https://your.stream.host:8000/stream). Shared by everyone in the world.",
+    name: "SHOUTCAST.Settings.StreamUrl.Name",
+    hint: "SHOUTCAST.Settings.StreamUrl.Hint",
     // World-scoped: GM sync tells every client to play, so every client has to
     // resolve the same URL. As a client setting, players who had never filled
     // it in just got a "not configured" warning instead of audio.
@@ -413,12 +442,12 @@ Hooks.once("init", () => {
     config: true,
     type: String,
     default: "",
-    onChange: () => window.streamPlayer.onStreamUrlChanged(),
+    onChange: () => streamPlayer.onStreamUrlChanged(),
   });
 
   game.settings.register(MODULE_ID, "volume", {
-    name: "Stream Volume",
-    hint: "Volume level for the stream (saved per client).",
+    name: "SHOUTCAST.Settings.Volume.Name",
+    hint: "SHOUTCAST.Settings.Volume.Hint",
     scope: "client",
     config: false,
     type: Number,
@@ -427,16 +456,16 @@ Hooks.once("init", () => {
 });
 
 Hooks.once("ready", () => {
-  window.streamPlayer.initialize();
+  streamPlayer.initialize();
 
   game.socket.on(`module.${MODULE_ID}`, (data) => {
     console.log("Stream Player | Socket command:", data?.action);
     switch (data?.action) {
       case "play":
-        window.streamPlayer.playLocal();
+        streamPlayer.playLocal();
         break;
       case "stop":
-        window.streamPlayer.stopLocal();
+        streamPlayer.stopLocal();
         break;
     }
   });
@@ -448,14 +477,14 @@ Hooks.on("getSceneControlButtons", (controls) => {
 
   controls.tokens.tools["stream-player"] = {
     name: "stream-player",
-    title: "Audio Stream",
+    title: "SHOUTCAST.Control.Title",
     icon: "fa-solid fa-radio",
     order: 99,
     button: true,
     visible: true,
     // v13+ SceneControlTool defines onChange only; onClick is not in the API.
     onChange: () => {
-      const existing = Object.values(ui.windows).find((w) => w.id === APP_ID);
+      const existing = foundry.applications.instances.get(APP_ID);
       if (existing) existing.close();
       else new StreamPlayerApp().render(true);
     },

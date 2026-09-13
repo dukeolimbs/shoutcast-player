@@ -4,89 +4,82 @@
     <div class="stream-status {{state}}">
       {{#if isConnecting}}
         <i class="fas fa-spinner fa-spin"></i>
-        <span>Connecting&hellip;</span>
+        <span>{{localize "SHOUTCAST.Status.Connecting"}}</span>
       {{else if isPlaying}}
         <i class="fas fa-circle stream-live-dot"></i>
-        <span>LIVE</span>
+        <span>{{localize "SHOUTCAST.Status.Live"}}</span>
       {{else if isNoSignal}}
         <i class="fas fa-exclamation-triangle"></i>
-        <span>No Signal &mdash; retrying&hellip;</span>
+        <span>{{localize "SHOUTCAST.Status.NoSignal"}}</span>
       {{else if isBlocked}}
         <i class="fas fa-hand"></i>
-        <span>Waiting for you</span>
+        <span>{{localize "SHOUTCAST.Status.Blocked"}}</span>
       {{else if isError}}
         <i class="fas fa-times-circle"></i>
-        <span>Connection Failed</span>
+        <span>{{localize "SHOUTCAST.Status.Failed"}}</span>
       {{else}}
         <i class="fas fa-stop-circle"></i>
-        <span>Stopped</span>
+        <span>{{localize "SHOUTCAST.Status.Stopped"}}</span>
       {{/if}}
     </div>
 
     {{#if isNoSignal}}
       {{#if looksUnreachable}}
         <p class="stream-info-msg stream-error-msg">
-          Still no stream after {{attempts}} attempts. Check that the server is
-          running and reachable &mdash; retrying in the background.
+          {{localize "SHOUTCAST.Message.Unreachable" attempts=attempts}}
         </p>
       {{else}}
         <p class="stream-info-msg">
-          The stream is not broadcasting yet. Waiting for an audio source&hellip;
+          {{localize "SHOUTCAST.Message.NoSignal"}}
         </p>
       {{/if}}
     {{/if}}
 
     {{#if isBlocked}}
       <p class="stream-info-msg">
-        Your browser will not start audio until you interact with the page.
-        Press Play to listen.
+        {{localize "SHOUTCAST.Message.Blocked"}}
       </p>
     {{/if}}
 
     {{#if isError}}
-      {{#if isMixedContent}}
-        <p class="stream-info-msg stream-error-msg">
-          This stream uses <strong>http://</strong> but Foundry is served over
-          <strong>https://</strong>, so the browser blocks it. Serve the stream
-          over https, or run Foundry over http.
-        </p>
-      {{else}}
-        <p class="stream-info-msg stream-error-msg">
-          The browser refused to play this stream. See the console (F12) for
-          details.
-        </p>
-      {{/if}}
+      <p class="stream-info-msg stream-error-msg">
+        {{#if isMixedContent}}
+          {{localize "SHOUTCAST.Message.MixedContent"}}
+        {{else}}
+          {{localize "SHOUTCAST.Message.PlayRejected"}}
+        {{/if}}
+      </p>
     {{/if}}
 
     <div class="form-group buttons stream-buttons">
       {{#if isConnecting}}
         <button type="button" disabled>
           <i class="fas fa-spinner fa-spin"></i>
-          Connecting&hellip;
+          {{localize "SHOUTCAST.Button.Connecting"}}
         </button>
       {{/if}}
       {{#if showPlay}}
-        <button type="button" id="play-stream">
+        <button type="button" data-action="play">
           <i class="fas fa-play"></i>
-          Play
+          {{localize "SHOUTCAST.Button.Play"}}
         </button>
       {{/if}}
       {{#if showRetry}}
-        <button type="button" id="retry-stream">
+        <button type="button" data-action="retry">
           <i class="fas fa-redo"></i>
-          {{retryLabel}}
+          {{localize retryLabel}}
         </button>
       {{/if}}
       {{#if showStop}}
-        <button type="button" id="stop-stream">
+        <button type="button" data-action="stop">
           <i class="fas fa-stop"></i>
-          Stop
+          {{localize "SHOUTCAST.Button.Stop"}}
         </button>
       {{/if}}
     </div>
 
     <div class="form-group stream-volume">
-      <label for="volume-control">Volume</label>
+      <label for="volume-control">{{localize "SHOUTCAST.Label.Volume"}}</label>
       <div class="form-fields">
         <input
           type="range"
@@ -106,16 +99,13 @@
 
   {{else}}
     <div class="notification warning">
-      Audio Stream URL is not configured.
+      {{localize "SHOUTCAST.Setup.NotConfigured"}}
     </div>
-    <p style="margin-top: 10px;">
+    <p class="stream-setup-hint">
       {{#if isGM}}
-        Go to
-        <strong>Game Settings &rarr; SHOUTcast Player</strong>
-        to set the stream URL.
+        {{localize "SHOUTCAST.Setup.GMHint"}}
       {{else}}
-        Ask your GM to set the stream URL in
-        <strong>Game Settings &rarr; SHOUTcast Player</strong>.
+        {{localize "SHOUTCAST.Setup.PlayerHint"}}
       {{/if}}
     </p>
   {{/if}}

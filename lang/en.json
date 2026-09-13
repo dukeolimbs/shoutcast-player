@@ -1,0 +1,36 @@
+{
+  "SHOUTCAST.App.Title": "Audio Stream",
+  "SHOUTCAST.Control.Title": "Audio Stream",
+
+  "SHOUTCAST.Settings.StreamUrl.Name": "Stream URL",
+  "SHOUTCAST.Settings.StreamUrl.Hint": "Full URL of your Icecast/SHOUTcast audio stream, e.g. https://your.stream.host:8000/stream. Shared by everyone in the world. If Foundry is served over https, the stream must be too.",
+  "SHOUTCAST.Settings.Volume.Name": "Stream Volume",
+  "SHOUTCAST.Settings.Volume.Hint": "Volume level for the stream, saved per client.",
+
+  "SHOUTCAST.Status.Connecting": "Connecting…",
+  "SHOUTCAST.Status.Live": "LIVE",
+  "SHOUTCAST.Status.NoSignal": "No Signal — retrying…",
+  "SHOUTCAST.Status.Blocked": "Waiting for you",
+  "SHOUTCAST.Status.Failed": "Connection Failed",
+  "SHOUTCAST.Status.Stopped": "Stopped",
+
+  "SHOUTCAST.Message.NoSignal": "The stream is not broadcasting yet. Waiting for an audio source…",
+  "SHOUTCAST.Message.Unreachable": "Still no stream after {attempts} attempts. Check that the server is running and reachable — retrying in the background.",
+  "SHOUTCAST.Message.Blocked": "Your browser will not start audio until you interact with the page. Press Play to listen.",
+  "SHOUTCAST.Message.MixedContent": "This stream uses http but Foundry is served over https, so the browser blocks it. Serve the stream over https, or reach Foundry over http.",
+  "SHOUTCAST.Message.PlayRejected": "The browser refused to play this stream. See the console (F12) for details.",
+
+  "SHOUTCAST.Button.Play": "Play",
+  "SHOUTCAST.Button.Stop": "Stop",
+  "SHOUTCAST.Button.Retry": "Retry",
+  "SHOUTCAST.Button.RetryNow": "Retry Now",
+  "SHOUTCAST.Button.Connecting": "Connecting…",
+
+  "SHOUTCAST.Label.Volume": "Volume",
+
+  "SHOUTCAST.Setup.NotConfigured": "Audio Stream URL is not configured.",
+  "SHOUTCAST.Setup.GMHint": "Go to Game Settings → Configure Settings → SHOUTcast Player to set the stream URL.",
+  "SHOUTCAST.Setup.PlayerHint": "Ask your GM to set the stream URL in the SHOUTcast Player module settings.",
+
+  "SHOUTCAST.Notify.NoUrl": "Audio Stream URL is not configured. Ask your GM to set it in the SHOUTcast Player module settings."
+}
