@@ -3,6 +3,10 @@
 Audit of v2.0.1 against Foundry VTT v14. Severity is about user-visible impact,
 not effort. Everything marked **Fixed** landed in v2.1.0; see `CHANGELOG.md`.
 
+The behavioural fixes are pinned by `test/state-machine.test.js` (`node
+test/state-machine.test.js`, 52 assertions, no dependencies). Rendering is not
+covered — the ApplicationV2 window still needs verifying in a live game.
+
 ## P0 — advertised features that do not work
 
 | # | Issue | Status |

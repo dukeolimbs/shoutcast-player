@@ -101,6 +101,18 @@ player.state === PlayerState.PLAYING;
 
 `window.streamPlayer` is kept as an alias for the same object.
 
+### Tests
+
+The connection state machine has a dependency-free regression suite that drives
+it against stubbed Foundry and browser globals:
+
+```bash
+node test/state-machine.test.js
+```
+
+Each case corresponds to an entry in [`ISSUES.md`](ISSUES.md). It does not
+cover rendering — that still needs a look in an actual game.
+
 Known issues and their triage live in [`ISSUES.md`](ISSUES.md); release notes in
 [`CHANGELOG.md`](CHANGELOG.md).
 
