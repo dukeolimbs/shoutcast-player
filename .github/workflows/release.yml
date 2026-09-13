@@ -43,6 +43,8 @@ jobs:
             main.css \
             templates \
             README.md \
+            lang \
+            CHANGELOG.md \
             LICENSE
 
       - name: Create GitHub Release

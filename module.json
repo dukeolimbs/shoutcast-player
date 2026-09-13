@@ -2,7 +2,7 @@
   "id": "shoutcast-player-v2",
   "title": "SHOUTcast Player",
   "description": "Audio stream player with connection state management and auto-retry. Plays a SHOUTcast/Icecast audio stream from the Token Controls toolbar.",
-  "version": "2.0.1",
+  "version": "2.1.0",
   "authors": [
     {
       "name": "Owen and his buddy Al",
@@ -30,7 +30,7 @@
   ],
   "url": "https://github.com/dukeolimbs/shoutcast-player-v2",
   "manifest": "https://github.com/dukeolimbs/shoutcast-player-v2/releases/latest/download/module.json",
-  "download": "https://github.com/dukeolimbs/shoutcast-player-v2/releases/download/v2.0.1/module.zip",
+  "download": "https://github.com/dukeolimbs/shoutcast-player-v2/releases/download/v2.1.0/module.zip",
   "readme": "https://github.com/dukeolimbs/shoutcast-player-v2/blob/main/README.md",
   "bugs": "https://github.com/dukeolimbs/shoutcast-player-v2/issues",
   "license": "MIT"
