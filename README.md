@@ -26,13 +26,13 @@ any internet radio stream into your game session without leaving Foundry.
 In Foundry, go to **Add-on Modules → Install Module** and paste this manifest URL:
 
 ```
-https://github.com/dukeolimbs/shoutcast-player-v2/releases/latest/download/module.json
+https://github.com/dukeolimbs/shoutcast-player/releases/latest/download/module.json
 ```
 
 ### Manual
 
 Download the latest `module.zip` from the
-[Releases](https://github.com/dukeolimbs/shoutcast-player-v2/releases) page and
+[Releases](https://github.com/dukeolimbs/shoutcast-player/releases) page and
 extract it into your Foundry `Data/modules/` folder as `shoutcast-player-v2`.
 
 ## Usage
@@ -127,8 +127,13 @@ This is a plain JS/CSS/Handlebars module — no build step. For local developmen
 symlink the repo into your Foundry `Data/modules/` folder:
 
 ```bash
-ln -s /path/to/shoutcast-player-v2 ".../FoundryVTT/Data/modules/shoutcast-player-v2"
+ln -s /path/to/shoutcast-player ".../FoundryVTT/Data/modules/shoutcast-player-v2"
 ```
+
+The destination folder must be named `shoutcast-player-v2` — that is the module
+id, and it stays as it is despite the repository itself being renamed. Foundry
+keys settings and the socket namespace off the id, so changing it would orphan
+every existing install.
 
 Edits to JS, CSS and templates only need a browser reload. **Edits to
 `module.json` need Foundry itself restarted** — return to Setup, or restart the
