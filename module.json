@@ -13,6 +13,7 @@
     "minimum": "14",
     "verified": "14.359"
   },
+  "socket": true,
   "scripts": ["stream-player.js"],
   "styles": ["main.css"],
   "esmodules": [],

@@ -23,6 +23,7 @@ class StreamPlayerManager {
     this._connectTimer = null;
     this._retryTimer = null;
     this._retryCount = 0;
+    this._teardown = false;
   }
 
   get isPlaying() {
@@ -96,6 +97,7 @@ class StreamPlayerManager {
     });
 
     this.audio.addEventListener("error", () => {
+      if (this._teardown) return; // raised by our own stopLocal() teardown
       this._clearConnectTimer();
       const err = this.audio?.error;
       if (!err) return;
@@ -119,6 +121,7 @@ class StreamPlayerManager {
     const streamUrl = game.settings.get("shoutcast-player-v2", "streamUrl");
     if (!streamUrl || !this.audio) return;
 
+    this._teardown = false;
     this._setState(PlayerState.CONNECTING);
     this.audio.src = streamUrl;
     this.audio.load();
@@ -141,7 +144,8 @@ class StreamPlayerManager {
     });
   }
 
-  play() {
+  /** Start the local stream without touching other clients. */
+  playLocal() {
     const streamUrl = game.settings.get("shoutcast-player-v2", "streamUrl");
     if (!streamUrl) {
       ui.notifications.warn(
@@ -153,10 +157,22 @@ class StreamPlayerManager {
     this._clearRetryTimer();
     this._retryCount = 0;
     this._tryConnect();
+  }
 
-    if (game.user.isGM) {
-      game.socket.emit("module.shoutcast-player-v2", { action: "play" });
-    }
+  play() {
+    this.playLocal();
+    this._broadcast("play");
+  }
+
+  /**
+   * Mirror GM transport actions to players. Only the originating client emits:
+   * incoming commands run through playLocal/stopLocal so that two GMs (or a GM
+   * and an assistant, who both satisfy isGM) cannot bounce an action back and
+   * forth between each other forever.
+   */
+  _broadcast(action) {
+    if (!game.user.isGM) return;
+    game.socket.emit("module.shoutcast-player-v2", { action });
   }
 
   retry() {
@@ -165,21 +181,28 @@ class StreamPlayerManager {
     this._tryConnect();
   }
 
-  stop() {
+  /** Tear down the local stream without touching other clients. */
+  stopLocal() {
     this._clearConnectTimer();
     this._clearRetryTimer();
     this._retryCount = 0;
 
     if (this.audio) {
+      this._teardown = true;
       this.audio.pause();
-      this.audio.src = "";
+      // Never assign "" here. An empty src re-enters the media load algorithm
+      // and fires MEDIA_ERR_SRC_NOT_SUPPORTED, which the error handler read as
+      // "broadcaster offline" and used to restart the stream 15s after Stop.
+      this.audio.removeAttribute("src");
+      this.audio.load();
     }
 
     this._setState(PlayerState.IDLE);
+  }
 
-    if (game.user.isGM) {
-      game.socket.emit("module.shoutcast-player-v2", { action: "stop" });
-    }
+  stop() {
+    this.stopLocal();
+    this._broadcast("stop");
   }
 
   setVolume(volume) {
@@ -265,10 +288,10 @@ Hooks.once("ready", () => {
     console.log("Stream Player | Socket command:", data.action);
     switch (data.action) {
       case "play":
-        window.streamPlayer.play();
+        window.streamPlayer.playLocal();
         break;
       case "stop":
-        window.streamPlayer.stop();
+        window.streamPlayer.stopLocal();
         break;
     }
   });
@@ -285,7 +308,8 @@ Hooks.on("getSceneControlButtons", (controls) => {
     order: 99,
     button: true,
     visible: true,
-    onClick: () => {
+    // v13+ SceneControlTool defines onChange only; onClick is not in the API.
+    onChange: () => {
       const existing = Object.values(ui.windows).find(
         (w) => w.id === "stream-player-app",
       );
